@@ -18,25 +18,24 @@ export default function CustomerDetailPage({ params }: CustomerDetailProps) {
           <section className="card">
             <h3>客户画像</h3>
             <p>来源：{customer.source}</p>
-            <p>意向：{customer.intent}</p>
-            <p>当前状态：{customer.status}</p>
+            <p>意向等级：{customer.intent}</p>
+            <p>当前阶段：{customer.stage}</p>
             <p>最近跟进：{customer.lastFollow}</p>
+            <p>当前状态：{customer.status}</p>
           </section>
 
           <section className="card">
-            <h3>AI 跟进建议</h3>
+            <h3>历史沟通摘要</h3>
+            <p style={{ marginTop: 0 }}>{customer.summary}</p>
+            <h4>AI 推荐下一步动作</h4>
             <p>{customer.aiAction}</p>
-            <h4>推荐销售话术</h4>
-            <p>“我理解您最担心的是稳定性，我们先用同类客户的真实案例对齐预期，再给您最适合的方案，不会让您盲目下单。”</p>
           </section>
 
           <section className="card">
-            <h3>下一步行动</h3>
-            <ul>
-              <li>发送标准报价单与权益说明</li>
-              <li>在 24 小时内二次触达确认顾虑</li>
-              <li>若确认需求，推进小单试用闭环</li>
-            </ul>
+            <h3>推荐话术</h3>
+            <p>{customer.recommendedScript}</p>
+            <h4>风险提醒</h4>
+            <p style={{ color: "#991b1b" }}>{customer.riskAlert}</p>
           </section>
         </div>
 
