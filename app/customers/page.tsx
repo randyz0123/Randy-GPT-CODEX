@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { customers } from "@/lib/mock-data";
+import { customers } from "@/lib/mock";
 
 export default function CustomersPage() {
   return (
@@ -19,14 +19,14 @@ export default function CustomersPage() {
               </tr>
             </thead>
             <tbody>
-              {customers.map((c) => (
-                <tr key={c.id}>
-                  <td><Link href={`/customers/${c.id}`} style={{ color: "#2563eb" }}>{c.name}</Link></td>
-                  <td>{c.source}</td>
-                  <td><span className={`badge ${c.intent === "高" ? "high" : c.intent === "中" ? "warn" : ""}`}>{c.intent}</span></td>
-                  <td>{c.lastFollow}</td>
-                  <td>{c.status}</td>
-                  <td>{c.aiAction}</td>
+              {customers.map((customer) => (
+                <tr key={customer.id}>
+                  <td><Link href={`/customers/${customer.id}`} style={{ color: "#2563eb" }}>{customer.name}</Link></td>
+                  <td>{customer.source}</td>
+                  <td><span className={`badge ${customer.intent === "高" ? "high" : customer.intent === "中" ? "warn" : ""}`}>{customer.intent}</span></td>
+                  <td>{customer.lastFollow}</td>
+                  <td>{customer.status}</td>
+                  <td>{customer.aiAction}</td>
                 </tr>
               ))}
             </tbody>

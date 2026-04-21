@@ -1,4 +1,4 @@
-import { dashboardStats, funnelData } from "@/lib/mock-data";
+import { dashboardStats, funnelData } from "@/lib/mock";
 
 export default function DashboardPage() {
   return (

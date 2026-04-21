@@ -1,7 +1,13 @@
-import { conversationLogs, customers } from "@/lib/mock-data";
+import { conversationLogs, customers } from "@/lib/mock";
 
-export default function CustomerDetailPage({ params }: { params: { id: string } }) {
-  const customer = customers.find((c) => c.id === params.id) ?? customers[0];
+type CustomerDetailProps = {
+  params: {
+    id: string;
+  };
+};
+
+export default function CustomerDetailPage({ params }: CustomerDetailProps) {
+  const customer = customers.find((item) => item.id === params.id) ?? customers[0];
 
   return (
     <main className="page">

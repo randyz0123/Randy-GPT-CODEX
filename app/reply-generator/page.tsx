@@ -1,8 +1,4 @@
-const replies = {
-  温和跟进: "理解您现在还在比较阶段，我先把核心差异和适配建议发您，您看完后我们再一起确认是否合适。",
-  专业成交: "结合您的需求和预算，我建议先从标准方案切入，这样能在可控成本下验证效果并保证交付稳定。",
-  强转化推进: "您当前关心的问题都已覆盖，今天确认可锁定本周权益和优先排期，我建议现在先完成下单流程。"
-};
+import { replyTemplates } from "@/lib/mock";
 
 export default function ReplyGeneratorPage() {
   return (
@@ -29,7 +25,7 @@ export default function ReplyGeneratorPage() {
 
           <section className="card">
             <h3>生成结果</h3>
-            {Object.entries(replies).map(([tone, text]) => (
+            {Object.entries(replyTemplates).map(([tone, text]) => (
               <div key={tone} style={{ marginBottom: 12 }}>
                 <p style={{ margin: 0, fontWeight: 700 }}>{tone}</p>
                 <p style={{ margin: "4px 0 0", color: "#334155" }}>{text}</p>
