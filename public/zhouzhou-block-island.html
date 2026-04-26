@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>舟舟 方块岛 - 原型</title>
+  <style>
+    :root {
+      --bg: #8fd3ff;
+      --panel: rgba(255,255,255,0.9);
+      --text: #1f2937;
+      --good: #16a34a;
+      --warn: #d97706;
+      --bad: #dc2626;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+    }
+    #game {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    .hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+      min-width: 240px;
+      line-height: 1.4;
+      font-size: 14px;
+      z-index: 20;
+    }
+    .hud strong { color: #0f766e; }
+    .tips {
+      position: fixed;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #374151;
+      z-index: 20;
+    }
+    .status-night { color: #1d4ed8; font-weight: 700; }
+    .status-danger { color: var(--bad); font-weight: 700; }
+    .status-safe { color: var(--good); font-weight: 700; }
+    .aim {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 16px;
+      height: 16px;
+      margin-left: -8px;
+      margin-top: -8px;
+      border: 2px solid rgba(255,255,255,0.8);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 15;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="aim"></div>
+  <div class="hud" id="hud"></div>
+  <div class="tips">
+    <strong>操作：</strong>W/A/S/D 移动，Space 跳跃，鼠标拖拽旋转视角，<strong>F</strong> 放置方块（消耗 1 木头），
+    触碰鱼干矿石可收集。夜晚会出现影子猫怪，尽量躲进自己搭的小屋！
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
+
+    const canvas = document.getElementById('game');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x8fd3ff);
+    scene.fog = new THREE.Fog(0x8fd3ff, 20, 70);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x74a12e, 0.95);
+    scene.add(hemi);
+
+    const sun = new THREE.DirectionalLight(0xfff0c9, 1.2);
+    sun.position.set(16, 24, 12);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -32;
+    sun.shadow.camera.right = 32;
+    sun.shadow.camera.top = 32;
+    sun.shadow.camera.bottom = -32;
+    scene.add(sun);
+
+    const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+    const mats = {
+      grass: new THREE.MeshLambertMaterial({ color: 0x63d471 }),
+      wood: new THREE.MeshLambertMaterial({ color: 0xc98a4a }),
+      stone: new THREE.MeshLambertMaterial({ color: 0x9ca3af }),
+      ore: new THREE.MeshLambertMaterial({ color: 0xf97316, emissive: 0x7c2d12 }),
+      cloud: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+      dogBody: new THREE.MeshLambertMaterial({ color: 0xf1c27d }),
+      dogEar: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
+      cat: new THREE.MeshLambertMaterial({ color: 0x1f2937 })
+    };
+
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const gridSize = 14;
+    const half = Math.floor(gridSize / 2);
+    const blocks = new Map();
+    const oreBlocks = [];
+    const placedBlocks = [];
+
+    const keyOf = (x, y, z) => `${x},${y},${z}`;
+
+    function addBlock(x, y, z, type, targetList = null) {
+      const mesh = new THREE.Mesh(blockGeo, mats[type]);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = { type, solid: true };
+      worldGroup.add(mesh);
+      blocks.set(keyOf(x, y, z), mesh);
+      if (targetList) targetList.push(mesh);
+      return mesh;
+    }
+
+    for (let x = -half; x <= half; x++) {
+      for (let z = -half; z <= half; z++) {
+        const dist = Math.hypot(x * 0.9, z * 0.9);
+        if (dist > half - 1.2 && Math.random() > 0.5) continue;
+
+        addBlock(x, 0, z, 'grass');
+        if (Math.random() < 0.25) addBlock(x, -1, z, 'stone');
+        if (Math.random() < 0.17) addBlock(x, -2, z, 'stone');
+        if (Math.random() < 0.18) addBlock(x, 1, z, 'wood');
+        if (Math.random() < 0.07) addBlock(x, 1, z, 'ore', oreBlocks);
+      }
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const c = new THREE.Mesh(blockGeo, mats.cloud);
+      c.scale.set(2 + Math.random() * 2, 0.6, 1.5 + Math.random() * 2);
+      c.position.set(-18 + Math.random() * 36, 9 + Math.random() * 8, -18 + Math.random() * 36);
+      c.castShadow = false;
+      c.receiveShadow = false;
+      scene.add(c);
+    }
+
+    const dog = new THREE.Group();
+    const dogBody = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.1), mats.dogBody);
+    dogBody.position.y = 0.9;
+    const dogHead = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.65), mats.dogBody);
+    dogHead.position.set(0, 1.1, 0.65);
+    const earL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.28, 0.12), mats.dogEar);
+    const earR = earL.clone();
+    earL.position.set(-0.2, 1.45, 0.65);
+    earR.position.set(0.2, 1.45, 0.65);
+    dog.add(dogBody, dogHead, earL, earR);
+    dog.position.set(0, 1, 0);
+    scene.add(dog);
+
+    const controls = {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      jump: false
+    };
+
+    let yaw = Math.PI;
+    let pitch = -0.45;
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const player = {
+      pos: new THREE.Vector3(0, 1.05, 0),
+      vel: new THREE.Vector3(),
+      speed: 5.2,
+      onGround: false,
+      wood: 0,
+      stone: 0,
+      ore: 0,
+      hp: 100,
+      safe: false
+    };
+
+    const cats = [];
+
+    function spawnCat() {
+      const cat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1), mats.cat);
+      const edge = half + 1;
+      cat.position.set(
+        (Math.random() - 0.5) * edge * 1.9,
+        1,
+        (Math.random() > 0.5 ? -1 : 1) * edge
+      );
+      cat.userData = { t: Math.random() * 10, speed: 0.9 + Math.random() * 0.8 };
+      cat.castShadow = true;
+      scene.add(cat);
+      cats.push(cat);
+    }
+
+    function getGroundY(x, z) {
+      const gx = Math.round(x);
+      const gz = Math.round(z);
+      for (let y = 6; y >= -4; y--) {
+        if (blocks.has(keyOf(gx, y, gz))) return y + 1;
+      }
+      return -100;
+    }
+
+    function collectNearby() {
+      for (let i = oreBlocks.length - 1; i >= 0; i--) {
+        const ore = oreBlocks[i];
+        if (!ore.parent) continue;
+        if (ore.position.distanceTo(player.pos) < 1.15) {
+          player.ore += 1;
+          worldGroup.remove(ore);
+          blocks.delete(keyOf(ore.position.x, ore.position.y, ore.position.z));
+          oreBlocks.splice(i, 1);
+        }
+      }
+
+      blocks.forEach((mesh) => {
+        if (!mesh.parent || mesh.userData.type !== 'wood') return;
+        if (mesh.position.distanceTo(player.pos) < 1.05 && mesh.position.y >= 1) {
+          player.wood += 1;
+          worldGroup.remove(mesh);
+          blocks.delete(keyOf(mesh.position.x, mesh.position.y, mesh.position.z));
+        }
+      });
+    }
+
+    function placeBlock() {
+      if (player.wood < 1) return;
+      const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).normalize();
+      const tx = Math.round(player.pos.x + dir.x * 1.3);
+      const tz = Math.round(player.pos.z + dir.z * 1.3);
+      const ty = Math.round(player.pos.y - 0.45);
+      const k = keyOf(tx, ty, tz);
+      if (blocks.has(k)) return;
+      const block = addBlock(tx, ty, tz, 'wood', placedBlocks);
+      block.userData.placed = true;
+      player.wood -= 1;
+    }
+
+    function isInsideHouse() {
+      const px = Math.round(player.pos.x);
+      const py = Math.round(player.pos.y);
+      const pz = Math.round(player.pos.z);
+      const hasRoof = blocks.has(keyOf(px, py + 1, pz)) || blocks.has(keyOf(px, py + 2, pz));
+      let walls = 0;
+      const offsets = [[1,0],[-1,0],[0,1],[0,-1]];
+      offsets.forEach(([dx,dz]) => {
+        if (blocks.has(keyOf(px + dx, py, pz + dz)) || blocks.has(keyOf(px + dx, py + 1, pz + dz))) walls++;
+      });
+      return hasRoof && walls >= 2;
+    }
+
+    const hud = document.getElementById('hud');
+    let timeOfDay = 0.25;
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyW') controls.forward = true;
+      if (e.code === 'KeyS') controls.backward = true;
+      if (e.code === 'KeyA') controls.left = true;
+      if (e.code === 'KeyD') controls.right = true;
+      if (e.code === 'Space') controls.jump = true;
+      if (e.code === 'KeyF') placeBlock();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyW') controls.forward = false;
+      if (e.code === 'KeyS') controls.backward = false;
+      if (e.code === 'KeyA') controls.left = false;
+      if (e.code === 'KeyD') controls.right = false;
+      if (e.code === 'Space') controls.jump = false;
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', () => {
+      dragging = false;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      yaw -= dx * 0.005;
+      pitch -= dy * 0.005;
+      pitch = Math.max(-1.2, Math.min(0.2, pitch));
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      const dt = Math.min(clock.getDelta(), 0.033);
+      timeOfDay = (timeOfDay + dt * 0.018) % 1;
+      const sunAngle = timeOfDay * Math.PI * 2;
+      const sunY = Math.sin(sunAngle);
+      const brightness = Math.max(0.15, 0.35 + sunY * 0.7);
+
+      scene.background.setHSL(0.56, 0.75, 0.58 * brightness + 0.1);
+      scene.fog.color.copy(scene.background);
+      hemi.intensity = 0.35 + brightness * 0.9;
+      sun.intensity = 0.2 + brightness * 1.2;
+      sun.position.set(Math.cos(sunAngle) * 22, Math.max(2, sunY * 22), 15);
+
+      const isNight = sunY < -0.12;
+      if (isNight && cats.length < 5) spawnCat();
+      if (!isNight && cats.length) {
+        cats.splice(0).forEach((cat) => scene.remove(cat));
+      }
+
+      const moveInput = new THREE.Vector3(
+        Number(controls.right) - Number(controls.left),
+        0,
+        Number(controls.backward) - Number(controls.forward)
+      );
+
+      if (moveInput.lengthSq() > 0) {
+        moveInput.normalize();
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        const rx = Math.sin(yaw - Math.PI / 2);
+        const rz = Math.cos(yaw - Math.PI / 2);
+        player.vel.x = (fx * -moveInput.z + rx * moveInput.x) * player.speed;
+        player.vel.z = (fz * -moveInput.z + rz * moveInput.x) * player.speed;
+      } else {
+        player.vel.x *= 0.8;
+        player.vel.z *= 0.8;
+      }
+
+      player.vel.y -= 14 * dt;
+      if (controls.jump && player.onGround) {
+        player.vel.y = 6.8;
+        player.onGround = false;
+      }
+
+      player.pos.addScaledVector(player.vel, dt);
+      const groundY = getGroundY(player.pos.x, player.pos.z);
+      if (player.pos.y <= groundY + 0.95) {
+        player.pos.y = groundY + 0.95;
+        player.vel.y = 0;
+        player.onGround = true;
+      }
+
+      if (player.pos.y < -10) {
+        player.pos.set(0, 1.05, 0);
+        player.vel.set(0, 0, 0);
+      }
+
+      dog.position.copy(player.pos);
+      if (moveInput.lengthSq() > 0.01) {
+        dog.rotation.y = Math.atan2(player.vel.x, player.vel.z);
+      }
+
+      const cameraOffset = new THREE.Vector3(0, 2.4, 5.2);
+      const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+      cameraOffset.applyEuler(rot);
+      camera.position.copy(player.pos).add(cameraOffset);
+      camera.lookAt(player.pos.x, player.pos.y + 0.8, player.pos.z);
+
+      collectNearby();
+
+      player.safe = isInsideHouse();
+      if (isNight) {
+        cats.forEach((cat) => {
+          cat.userData.t += dt;
+          const toPlayer = new THREE.Vector3().subVectors(player.pos, cat.position);
+          toPlayer.y = 0;
+          if (toPlayer.lengthSq() > 0.001) {
+            toPlayer.normalize();
+            cat.position.addScaledVector(toPlayer, cat.userData.speed * dt);
+            cat.position.y = getGroundY(cat.position.x, cat.position.z) + 0.3;
+            cat.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+          }
+
+          if (cat.position.distanceTo(player.pos) < 1.2 && !player.safe) {
+            player.hp -= 12 * dt;
+          }
+        });
+      }
+
+      player.hp = Math.max(0, Math.min(100, player.hp));
+      const stateText = isNight
+        ? (player.safe ? '<span class="status-safe">夜晚：安全（在屋内）</span>' : '<span class="status-danger">夜晚：危险！影子猫怪靠近中</span>')
+        : '<span class="status-night">白天：适合采集与建造</span>';
+
+      hud.innerHTML = `
+        <div><strong>《舟舟 方块岛》原型</strong></div>
+        <div>鱼干矿石：<strong>${player.ore}</strong></div>
+        <div>木头库存：<strong>${player.wood}</strong></div>
+        <div>生命值：<strong>${Math.round(player.hp)}</strong></div>
+        <div>${stateText}</div>
+      `;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
